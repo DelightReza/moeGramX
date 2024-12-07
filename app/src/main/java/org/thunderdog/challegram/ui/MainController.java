@@ -156,10 +156,10 @@ import me.vkryl.core.collection.IntList;
 import me.vkryl.core.collection.LongSparseIntArray;
 import me.vkryl.core.lambda.CancellableRunnable;
 import me.vkryl.core.lambda.FutureBool;
-import me.vkryl.td.ChatId;
-import me.vkryl.td.ChatPosition;
-import me.vkryl.td.Td;
-import me.vkryl.td.TdConstants;
+import tgx.td.ChatId;
+import tgx.td.ChatPosition;
+import tgx.td.Td;
+import tgx.td.TdConstants;
 import moe.kirao.mgx.MoexConfig;
 
 public class MainController extends ViewPagerController<Void> implements Menu, MoreDelegate, OverlayButtonWrap.Callback, TdlibOptionListener, AppUpdater.Listener, ChatFoldersListener, GlobalCountersListener, Settings.ChatFolderSettingsListener, MoexConfig.SettingsChangeListener {
@@ -494,7 +494,7 @@ public class MainController extends ViewPagerController<Void> implements Menu, M
     if (!hasFolders()) {
       getDefaultSectionItems().set(0, item);
     }
-    headerCell.getTopView().setItemAt(pagerItemPosition, item);
+    headerCell.getTopView().setItemAt(pagerItemPosition, item, isFocused());
   }
 
   private @Nullable ViewPagerTopView.Item buildSectionItem (long pagerItemId, int pagerItemPosition) {
@@ -605,7 +605,8 @@ public class MainController extends ViewPagerController<Void> implements Menu, M
       return;
     float x = getX(view, headerCell.getView());
     boolean displayTabsAtBottom = displayTabsAtBottom();
-    float translationX = x - menuWidth / 2 + view.getMeasuredWidth() / 2;
+    int viewWidth = headerCell.getTopView().getItemWidth(view);
+    float translationX = x - menuWidth / 2 + viewWidth / 2;
     int dx = displayTabsAtBottom ? 0 : Screen.dp(7f);
     menu.setTranslationX(MathUtils.clamp(translationX, dx, Screen.currentWidth() - menuWidth - dx));
     int cornerCenterX = menuWidth / 2 + Math.round(translationX - menu.getTranslationX());
@@ -2698,6 +2699,7 @@ public class MainController extends ViewPagerController<Void> implements Menu, M
     ViewPagerHeaderViewCompact headerCellView = (ViewPagerHeaderViewCompact) headerCell.getView();
     boolean hasFolders = hasFolders();
     boolean displayTabsAtBottom = displayTabsAtBottom();
+    headerCell.getTopView().setAnimateItemChanges(!Settings.instance().needReduceMotion());
     headerCell.getTopView().setShowLabelOnActiveOnly(hasFolders && tdlib.settings().chatFolderStyle() == ChatFolderStyle.ICON_WITH_LABEL_ON_ACTIVE_FOLDER);
     headerCell.getTopView().setUseDarkBackground(displayTabsAtBottom);
     headerCell.getTopView().setDrawSelectionAtTop(displayTabsAtBottom);

@@ -8,7 +8,7 @@ import org.thunderdog.challegram.telegram.Tdlib;
 
 import me.vkryl.core.StringUtils;
 import me.vkryl.core.lambda.RunnableData;
-import me.vkryl.td.Td;
+import tgx.td.Td;
 
 public class ChatUtils {
   @Nullable

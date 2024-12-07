@@ -149,6 +149,7 @@ import org.thunderdog.challegram.widget.CheckView;
 import org.thunderdog.challegram.widget.CustomTextView;
 import org.thunderdog.challegram.widget.EmojiLayout;
 import org.thunderdog.challegram.widget.FileProgressComponent;
+import org.thunderdog.challegram.widget.KeyboardFrameLayout;
 import org.thunderdog.challegram.widget.NoScrollTextView;
 import org.thunderdog.challegram.widget.PopupLayout;
 import org.thunderdog.challegram.widget.ShadowView;
@@ -176,10 +177,10 @@ import me.vkryl.core.StringUtils;
 import me.vkryl.core.collection.IntList;
 import me.vkryl.core.lambda.Destroyable;
 import me.vkryl.core.lambda.RunnableData;
-import me.vkryl.td.ChatId;
-import me.vkryl.td.MessageId;
-import me.vkryl.td.Td;
-import me.vkryl.td.TdConstants;
+import tgx.td.ChatId;
+import tgx.td.MessageId;
+import tgx.td.Td;
+import tgx.td.TdConstants;
 import moe.kirao.mgx.utils.SystemUtils;
 
 public class MediaViewController extends ViewController<MediaViewController.Args> implements
@@ -531,7 +532,7 @@ public class MediaViewController extends ViewController<MediaViewController.Args
 
   @Override
   public int provideOffset (InlineResultsWrap v) {
-    final int offset = emojiLayout != null && emojiLayout.getVisibility() == View.VISIBLE && emojiLayout.getParent() != null ? emojiLayout.getMeasuredHeight() : 0;
+    final int offset = keyboardFrameLayout != null && keyboardFrameLayout.getVisibility() == View.VISIBLE && keyboardFrameLayout.getParent() != null ? keyboardFrameLayout.getMeasuredHeight() : 0;
     return (captionView.getMeasuredHeight() /*- Screen.dp(50f)*/) + offset;
   }
 
@@ -635,6 +636,7 @@ public class MediaViewController extends ViewController<MediaViewController.Args
     }
   }
 
+  private KeyboardFrameLayout keyboardFrameLayout;
   private EmojiLayout emojiLayout;
   private TextFormattingLayout textFormattingLayout;
 
@@ -684,31 +686,51 @@ public class MediaViewController extends ViewController<MediaViewController.Args
   @Override
   public void onSearchRequested (EmojiLayout layout, boolean areStickers) { }
 
+
+  private float getKeyboardOffset () {
+    return keyboardFrameLayout != null ? keyboardFrameLayout.getLayoutTranslationOffset() : 0f;
+  }
+
+  private void onKeyboardLayoutTranslation (float translationY) {
+    checkBottomWrapY();
+  }
+
+
   private void openEmojiKeyboard () {
     if (!emojiShown) {
-      if (emojiLayout == null) {
-        emojiLayout = new EmojiLayout(context());
+      if (keyboardFrameLayout == null) {
+        keyboardFrameLayout = new KeyboardFrameLayout(context());
+        keyboardFrameLayout.setLayoutParams(FrameLayoutFix.newParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+        keyboardFrameLayout.setParentView(bottomWrap, contentView, popupView);
+        keyboardFrameLayout.setUpdateTranslationListener(this::onKeyboardLayoutTranslation);
+        keyboardFrameLayout.useHideByDetachView();
+
+        textFormattingLayout = keyboardFrameLayout.contentView.textFormattingLayout;
+        textFormattingLayout.init(this, inputView, new TextFormattingLayout.Delegate() {
+          @Override
+          public void onWantsCloseTextFormattingKeyboard () {
+            closeTextFormattingKeyboard();
+          }
+
+          @Override
+          public void onWantsOpenTextFormattingKeyboard () {
+            openEmojiKeyboard();
+          }
+        });
+
+        emojiLayout = keyboardFrameLayout.contentView.emojiLayout;
         emojiLayout.initWithMediasEnabled(this, false, this, this, false); // FIXME shall we use dark mode?
         emojiLayout.setAllowPremiumFeatures(tdlib.isSelfChat(getOutputChatId()));
-        emojiLayout.setLayoutParams(FrameLayoutFix.newParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
-        bottomWrap.addView(emojiLayout);
-        if (inputView != null) {
-          textFormattingLayout = new TextFormattingLayout(context(), this, inputView);
-          textFormattingLayout.setDelegate(this::closeTextFormattingKeyboard);
-          textFormattingLayout.setVisibility(View.GONE);
-          emojiLayout.addView(textFormattingLayout, FrameLayoutFix.newParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        }
-        popupView.getViewTreeObserver().addOnPreDrawListener(emojiLayout);
-      } else if (emojiLayout.getParent() == null) {
-        bottomWrap.addView(emojiLayout);
+        emojiLayout.setLayoutParams(FrameLayoutFix.newParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        bottomWrap.addView(keyboardFrameLayout);
       }
-
+      keyboardFrameLayout.setVisible(true);
       emojiState = getKeyboardState();
 
       setEmojiShown(true);
       if (emojiState) {
         captionEmojiButton.setImageResource(R.drawable.baseline_keyboard_24);
-        emojiLayout.hideKeyboard((EditText) captionView);
+        keyboardFrameLayout.hideKeyboard((EditText) captionView);
       } else {
         captionEmojiButton.setImageResource(R.drawable.baseline_direction_arrow_down_24);
       }
@@ -716,10 +738,8 @@ public class MediaViewController extends ViewController<MediaViewController.Args
   }
 
   private void removeEmojiView () {
-    if (emojiLayout != null && emojiLayout.getParent() != null) {
-      ViewGroup parent = ((ViewGroup) emojiLayout.getParent());
-      parent.removeView(emojiLayout);
-      parent.requestLayout();
+    if (keyboardFrameLayout != null) {
+      keyboardFrameLayout.setVisible(false);
     }
   }
 
@@ -733,11 +753,15 @@ public class MediaViewController extends ViewController<MediaViewController.Args
   }
 
   private void closeEmojiKeyboard () {
+    closeEmojiKeyboard(false);
+  }
+
+  private void closeEmojiKeyboard (boolean byKeyboardOpen) {
     if (emojiShown) {
-      if (emojiLayout != null) {
+      if (keyboardFrameLayout != null) {
         removeEmojiView();
-        if (emojiState) {
-          emojiLayout.showKeyboard((EditText) captionView);
+        if (emojiState && !byKeyboardOpen) {
+          keyboardFrameLayout.showKeyboard((EditText) captionView);
         }
       }
       setEmojiShown(false);
@@ -749,7 +773,7 @@ public class MediaViewController extends ViewController<MediaViewController.Args
 
   @Override
   public int[] displayBaseViewWithAnchor (EmojiToneHelper context, View anchorView, View viewToDisplay, int viewWidth, int viewHeight, int horizontalMargin, int horizontalOffset, int verticalOffset) {
-    return EmojiToneHelper.defaultDisplay(context, anchorView, viewToDisplay, viewWidth, viewHeight, horizontalMargin, horizontalOffset, verticalOffset, contentView, bottomWrap, emojiLayout);
+    return EmojiToneHelper.defaultDisplay(context, anchorView, viewToDisplay, viewWidth, viewHeight, horizontalMargin, horizontalOffset, verticalOffset, contentView, bottomWrap, keyboardFrameLayout);
   }
 
   @Override
@@ -760,7 +784,7 @@ public class MediaViewController extends ViewController<MediaViewController.Args
   // Other
 
   private void checkCaptionButtonsY () {
-    final int offset = emojiLayout != null && emojiLayout.getVisibility() == View.VISIBLE && emojiLayout.getParent() != null ? emojiLayout.getMeasuredHeight() : 0;
+    final float offset = keyboardFrameLayout != null && keyboardFrameLayout.getVisibility() == View.VISIBLE && keyboardFrameLayout.getParent() != null ? keyboardFrameLayout.getMeasuredHeight() : 0;
     captionEmojiButton.setTranslationY(-offset);
     captionDoneButton.setTranslationY(-offset);
     captionWrapView.setTranslationY(-offset);
@@ -942,11 +966,11 @@ public class MediaViewController extends ViewController<MediaViewController.Args
   public boolean onKeyboardStateChanged (boolean visible) {
     if (mode == MODE_GALLERY) {
       if (visible && !getKeyboardState()) {
-        closeEmojiKeyboard();
+        closeEmojiKeyboard(true);
       }
       boolean res = super.onKeyboardStateChanged(visible);
-      if (emojiLayout != null) {
-        emojiLayout.onKeyboardStateChanged(visible);
+      if (keyboardFrameLayout != null) {
+        keyboardFrameLayout.onKeyboardStateChanged(visible);
       }
       setInCaption(visible || emojiShown);
       mediaView.layoutCells();
@@ -1613,26 +1637,19 @@ public class MediaViewController extends ViewController<MediaViewController.Args
     moreButton.setBackgroundResource(R.drawable.bg_btn_header_light);
   }
 
-  @Override
-  public void onMenuItemPressed (int id, View view) {
-    if (id == R.id.menu_btn_pictureInPicture) {
-      enterPictureInPicture();
-    } else if (id == R.id.menu_btn_forward) {
-      // ...
-    } else if (id == R.id.menu_btn_edit) {
-      openForceEditMode();
-    } else if (id == R.id.menu_btn_more) {
-      IntList ids = new IntList(4);
-      StringList strings = new StringList(4);
+  private void openMoreMenu () {
+    IntList ids = new IntList(4);
+    StringList strings = new StringList(4);
 
-      MediaItem item = stack.getCurrent();
+    MediaItem item = stack.getCurrent();
 
-      TdApi.Chat chat = tdlib.chat(item.getSourceChatId());
+    TdApi.Chat chat = tdlib.chat(item.getSourceChatId());
+    TdApi.Message message = item.getMessage();
 
-      if (tdlib.canEditMedia(item.getMessage(), true)) {
-        ids.append(R.id.btn_replace);
-        strings.append(item.isVideo() ? R.string.ReplaceVideo : R.string.ReplaceImage);
-      }
+    if (message != null && tdlib.canEditMedia(message, tdlib.getMessagePropertiesSync(message), true)) {
+      ids.append(R.id.btn_replace);
+      strings.append(item.isVideo() ? R.string.ReplaceVideo : R.string.ReplaceImage);
+    }
 
       if (item.isLoaded() && item.canBeSaved()) {
         if ((item.isVideo() && !item.isGifType()) || (getArgumentsStrict().forceOpenIn)) {
@@ -1647,48 +1664,60 @@ public class MediaViewController extends ViewController<MediaViewController.Args
         }
       }
 
-      if (mode != MODE_SECRET && mode != MODE_GALLERY && item.canBeSaved() && item.canBeShared()) {
-        ids.append(R.id.btn_share);
-        strings.append(R.string.Share);
-      }
+    if (mode != MODE_SECRET && mode != MODE_GALLERY && item.canBeSaved() && item.canBeShared()) {
+      ids.append(R.id.btn_share);
+      strings.append(R.string.Share);
+    }
 
-      if (item.isGifType() && item.canBeSaved()) {
-        ids.append(R.id.btn_saveGif);
-        strings.append(R.string.SaveGif);
-      }
+    if (item.isGifType() && item.canBeSaved()) {
+      ids.append(R.id.btn_saveGif);
+      strings.append(R.string.SaveGif);
+    }
 
-      if (!StringUtils.isEmpty(getArgumentsStrict().copyLink) || (chat != null && tdlib.canCopyPostLink(item.getMessage()))) {
-        ids.append(R.id.btn_copyLink);
-        strings.append(R.string.CopyLink);
-      }
+    if (!StringUtils.isEmpty(getArgumentsStrict().copyLink) || (chat != null && tdlib.canCopyPostLink(item.getMessage()))) {
+      ids.append(R.id.btn_copyLink);
+      strings.append(R.string.CopyLink);
+    }
 
-      if (item.getSourceChatId() != 0 && item.getSourceMessageId() != 0 && mode == MODE_MESSAGES) {
-        ids.append(R.id.btn_showInChat);
-        strings.append(R.string.ShowInChat);
-      }
+    if (item.getSourceChatId() != 0 && item.getSourceMessageId() != 0 && mode == MODE_MESSAGES) {
+      ids.append(R.id.btn_showInChat);
+      strings.append(R.string.ShowInChat);
+    }
 
-      if (item.canBeReported() && (item.getMessage() != null || stack.getCurrentIndex() == 0)) {
-        ids.append(R.id.btn_messageReport);
-        strings.append(R.string.Report);
-      }
+    if (item.canBeReported() && (item.getMessage() != null || stack.getCurrentIndex() == 0)) {
+      ids.append(R.id.btn_messageReport);
+      strings.append(R.string.Report);
+    }
 
-      boolean isSelfProfile = mode == MODE_PROFILE && tdlib.isSelfSender(item.getSourceSender());
-      boolean canDelete = isSelfProfile;
-      if (!canDelete && mode == MODE_CHAT_PROFILE) {
-        canDelete = chat != null && tdlib.canChangeInfo(chat);
-      }
-      if (isSelfProfile && stack.getCurrentIndex() != 0) {
-        ids.append(R.id.btn_setProfilePhoto);
-        strings.append(R.string.SetAsCurrent);
-      }
-      if (canDelete) {
-        ids.append(R.id.btn_deleteProfilePhoto);
-        strings.append(R.string.Delete);
-      }
+    boolean isSelfProfile = mode == MODE_PROFILE && tdlib.isSelfSender(item.getSourceSender());
+    boolean canDelete = isSelfProfile;
+    if (!canDelete && mode == MODE_CHAT_PROFILE) {
+      canDelete = chat != null && tdlib.canChangeInfo(chat);
+    }
+    if (isSelfProfile && stack.getCurrentIndex() != 0) {
+      ids.append(R.id.btn_setProfilePhoto);
+      strings.append(R.string.SetAsCurrent);
+    }
+    if (canDelete) {
+      ids.append(R.id.btn_deleteProfilePhoto);
+      strings.append(R.string.Delete);
+    }
 
-      if (!ids.isEmpty()) {
-        showMore(ids.get(), strings.get(), 0, canRunFullscreen());
-      }
+    if (!ids.isEmpty()) {
+      showMore(ids.get(), strings.get(), 0, canRunFullscreen());
+    }
+  }
+
+  @Override
+  public void onMenuItemPressed (int id, View view) {
+    if (id == R.id.menu_btn_pictureInPicture) {
+      enterPictureInPicture();
+    } else if (id == R.id.menu_btn_forward) {
+      // ...
+    } else if (id == R.id.menu_btn_edit) {
+      openForceEditMode();
+    } else if (id == R.id.menu_btn_more) {
+      openMoreMenu();
     } else if (id == R.id.menu_btn_masks) {
     }
   }
@@ -1729,7 +1758,7 @@ public class MediaViewController extends ViewController<MediaViewController.Args
     } else if (id == R.id.btn_messageReport) {
       TdApi.Message message = item.getMessage();
       if (message != null) {
-        TdlibUi.reportChat(this, item.getSourceChatId(), new TdApi.Message[] {message}, null, getForcedTheme());
+        TdlibUi.reportChat(this, item.getSourceChatId(), new TdApi.Message[] {message}, getForcedTheme(), null, true);
       } else {
         final long chatId = Td.getSenderId(item.getSourceSender());
         final RunnableData<TdApi.PhotoSize> act = (photoSize) -> {
@@ -1810,8 +1839,8 @@ public class MediaViewController extends ViewController<MediaViewController.Args
       if (item.getMessage() != null) {
         c = new ShareController(context, tdlib);
         if (Td.isText(item.getMessage().content)) {
-          TdApi.WebPage webPage = ((TdApi.MessageText) item.getMessage().content).webPage;
-          c.setArguments(new ShareController.Args(item, webPage.displayUrl, webPage.displayUrl));
+          TdApi.LinkPreview linkPreview = ((TdApi.MessageText) item.getMessage().content).linkPreview;
+          c.setArguments(new ShareController.Args(item, linkPreview.displayUrl, linkPreview.displayUrl));
         } else {
           c.setArguments(new ShareController.Args(item.getMessage()));
         }
@@ -2092,11 +2121,12 @@ public class MediaViewController extends ViewController<MediaViewController.Args
         TdApi.Message message = item.getMessage();
         if (message != null && Td.isText(message.content)) {
           TdApi.MessageText messageText = (TdApi.MessageText) message.content;
-          if (messageText.webPage != null) {
-            if (!StringUtils.isEmpty(messageText.webPage.author)) {
-              return messageText.webPage.author;
+          if (messageText.linkPreview != null) {
+            String author = messageText.linkPreview.author;
+            if (!StringUtils.isEmpty(author)) {
+              return author;
             }
-            return messageText.webPage.displayUrl;
+            return messageText.linkPreview.displayUrl;
           }
         }
         String authorText = getAuthorText(item);
@@ -3460,7 +3490,7 @@ public class MediaViewController extends ViewController<MediaViewController.Args
 
   private void checkBottomWrapY () {
     int thumbsDistance = (Screen.dp(THUMBS_PADDING) * 2 + Screen.dp(THUMBS_HEIGHT)) * (inForceEditMode() ? 0 : 1);
-    float offsetDistance = (float) measureBottomWrapHeight() * dismissFactor;
+    float offsetDistance = (float) measureBottomWrapHeight() * dismissFactor - getKeyboardOffset();
     // int appliedBottomPadding = -this.appliedBottomPadding;
     if (bottomWrap != null) {
       bottomWrap.setTranslationY(offsetDistance - (thumbsFactor * (float) thumbsDistance) * (1f - dismissFactor) - appliedBottomPadding);
@@ -5169,7 +5199,7 @@ public class MediaViewController extends ViewController<MediaViewController.Args
           }
         };
         captionView.setPadding(Screen.dp(14f), Screen.dp(14f), Screen.dp(14f), Screen.dp(14f));
-        captionView.setTextColorId(ColorId.white);
+        captionView.setTextColorId(ColorId.white, true);
         captionView.setTextSize(Screen.dp(16f));
         captionView.setTextStyleProvider(TGMessage.getTextStyleProvider());
         captionView.setLinkColorId(ColorId.caption_textLink, ColorId.caption_textLinkPressHighlight);
@@ -8245,11 +8275,11 @@ public class MediaViewController extends ViewController<MediaViewController.Args
       return;
     }
 
-    TGWebPage parsedWebPage = msg.getParsedWebPage();
+    TGWebPage parsedWebPage = msg.getParsedLinkPreview();
     if (parsedWebPage == null) {
       return;
     }
-    TdApi.WebPage webPage = parsedWebPage.getWebPage();
+    TdApi.LinkPreview linkPreview = parsedWebPage.getLinkPreview();
     MediaStack stack;
 
     stack = new MediaStack(context.context(), context.tdlib());
@@ -8267,7 +8297,7 @@ public class MediaViewController extends ViewController<MediaViewController.Args
 
     Args args = new Args(context, MODE_MESSAGES, stack);
     args.noLoadMore = true;
-    args.copyLink = webPage.url;
+    args.copyLink = linkPreview.url;
     args.forceThumbs = true;
     args.areOnlyScheduled = msg.isScheduled();
     if (context instanceof MediaCollectorDelegate) {
@@ -8427,14 +8457,7 @@ public class MediaViewController extends ViewController<MediaViewController.Args
   }
 
   private void setTextFormattingLayoutVisible (boolean visible) {
-    textFormattingVisible = visible;
-    if (emojiLayout != null && textFormattingLayout != null) {
-      textFormattingLayout.setVisibility(visible ? View.VISIBLE : View.GONE);
-      emojiLayout.optimizeForDisplayTextFormattingLayout(visible);
-      if (visible) {
-        textFormattingLayout.checkButtonsActive(false);
-      }
-    }
+    textFormattingVisible = keyboardFrameLayout != null && keyboardFrameLayout.contentView.setTextFormattingLayoutVisible(visible);
   }
 
   private void closeTextFormattingKeyboard () {

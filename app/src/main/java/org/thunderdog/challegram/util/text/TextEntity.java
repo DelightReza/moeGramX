@@ -106,9 +106,9 @@ public abstract class TextEntity {
     if (callback.forceInstantView(url)) {
       parameters.forceInstantView();
     }
-    TdApi.WebPage webPage = callback.findWebPage(url);
+    TdApi.LinkPreview webPage = callback.findLinkPreview(url);
     if (webPage != null) {
-      parameters.sourceWebView(webPage);
+      parameters.sourceLinkPreview(webPage);
     }
     return parameters;
   }
@@ -136,6 +136,9 @@ public abstract class TextEntity {
   public abstract boolean isCustomEmoji ();
   public abstract long getCustomEmojiId ();
   public abstract TextEntity createCopy ();
+  public abstract boolean isQuote ();
+  public abstract  TdApi.TextEntity getQuote ();
+  public abstract int getQuoteId ();
 
   // TODO: TextEntityCustom & TextEntityMessage to make things simpler
   public abstract TextEntity setOnClickListener (ClickableSpan onClickListener);

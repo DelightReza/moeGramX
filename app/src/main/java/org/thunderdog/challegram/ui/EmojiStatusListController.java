@@ -70,7 +70,7 @@ import me.vkryl.core.BitwiseUtils;
 import me.vkryl.core.StringUtils;
 import me.vkryl.core.collection.IntList;
 import me.vkryl.core.collection.LongList;
-import me.vkryl.td.Td;
+import tgx.td.Td;
 
 public class EmojiStatusListController extends ViewController<EmojiLayout> implements
   StickerSmallView.StickerMovementCallback, StickerPreviewView.MenuStickerPreviewCallback,
@@ -942,7 +942,7 @@ public class EmojiStatusListController extends ViewController<EmojiLayout> imple
         );
       } else {
         if (!StringUtils.isEmpty(currentEmojiSearchRequest)) {
-          tdlib.client().send(new TdApi.SearchStickers(new TdApi.StickerTypeCustomEmoji(), currentEmojiSearchRequest, 200), serviceStickersHandler(currentTextSearchRequest));
+          tdlib.client().send(new TdApi.SearchStickers(new TdApi.StickerTypeCustomEmoji(), currentEmojiSearchRequest, null, U.getInputLanguages(), 0, 200), serviceStickersHandler(currentTextSearchRequest));
         } else {
           final String textQuery = currentTextSearchRequest;
           tdlib.send(new TdApi.SearchEmojis(textQuery, U.getInputLanguages()), (keywords, error) -> {
@@ -953,7 +953,7 @@ public class EmojiStatusListController extends ViewController<EmojiLayout> imple
             String[] uniqueEmojis = Td.findUniqueEmojis(keywords.emojiKeywords);
             if (uniqueEmojis.length > 0) {
               String uniqueEmojisQuery = TextUtils.join(" ", uniqueEmojis);
-              tdlib.client().send(new TdApi.SearchStickers(new TdApi.StickerTypeCustomEmoji(), uniqueEmojisQuery, 200), serviceStickersHandler(currentTextSearchRequest));
+              tdlib.client().send(new TdApi.SearchStickers(new TdApi.StickerTypeCustomEmoji(), uniqueEmojisQuery, null, U.getInputLanguages(), 0, 200), serviceStickersHandler(currentTextSearchRequest));
             } else {
               tdlib.client().send(new TdApi.SearchInstalledStickerSets(new TdApi.StickerTypeCustomEmoji(), textQuery, 200), stickerSetsHandler(false));
             }
@@ -1347,7 +1347,7 @@ public class EmojiStatusListController extends ViewController<EmojiLayout> imple
   /* Preview Sticker Menu */
 
   @Override
-  public void buildMenuStickerPreview (ArrayList<StickerPreviewView.MenuItem> menuItems, @NonNull TGStickerObj sticker, @NonNull StickerSmallView stickerSmallView) {
+  public void buildMenuStickerPreview (ArrayList<StickerPreviewView.MenuItem> menuItems, @NonNull TGStickerObj sticker) {
     menuItems.add(new StickerPreviewView.MenuItem(StickerPreviewView.MenuItem.MENU_ITEM_TEXT,
       Lang.getString(R.string.SetEmojiAsStatus).toUpperCase(), R.id.btn_setEmojiStatus, ColorId.textNeutral));
 
@@ -1356,7 +1356,11 @@ public class EmojiStatusListController extends ViewController<EmojiLayout> imple
   }
 
   @Override
-  public void onMenuStickerPreviewClick (View v, ViewController<?> context, @NonNull TGStickerObj sticker, @NonNull StickerSmallView stickerSmallView) {
+  public void onMenuStickerPreviewClick (View v, ViewController<?> context, @NonNull TGStickerObj sticker, @Nullable StickerSmallView stickerSmallView) {
+    if (stickerSmallView == null) {
+      return;
+    }
+
     final long emojiId = sticker.getCustomEmojiId();
     final int viewId = v.getId();
     if (viewId == R.id.btn_setEmojiStatus) {

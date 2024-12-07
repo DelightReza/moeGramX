@@ -112,6 +112,7 @@ import org.thunderdog.challegram.loader.ImageLoader;
 import org.thunderdog.challegram.loader.ImageReader;
 import org.thunderdog.challegram.loader.ImageStrictCache;
 import org.thunderdog.challegram.mediaview.data.MediaItem;
+import org.thunderdog.challegram.telegram.RandomAccessDataSource;
 import org.thunderdog.challegram.telegram.Tdlib;
 import org.thunderdog.challegram.telegram.TdlibDataSource;
 import org.thunderdog.challegram.telegram.TdlibDelegate;
@@ -178,12 +179,12 @@ import me.vkryl.core.collection.LongList;
 import me.vkryl.core.lambda.RunnableBool;
 import me.vkryl.core.lambda.RunnableData;
 import me.vkryl.core.util.LocalVar;
-import me.vkryl.td.Td;
 import okio.BufferedSink;
 import okio.BufferedSource;
 import okio.Okio;
 import okio.Sink;
 import okio.Source;
+import tgx.td.Td;
 
 @SuppressWarnings ("JniMissingFunction")
 public class U {
@@ -492,6 +493,12 @@ public class U {
         case TdlibNotificationManager.ID_ONGOING_CALL_NOTIFICATION:
         case TdlibNotificationManager.ID_INCOMING_CALL_NOTIFICATION:
           knownType = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL;
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (UI.getAppContext().checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+              knownType |= android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+            }
+          }
+          knownType |= android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK;
           break;
         case TdlibNotificationManager.ID_PENDING_TASK:
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -754,6 +761,10 @@ public class U {
     } else {
       return new ProgressiveMediaSource.Factory(new TdlibDataSource.Factory()).createMediaSource(newMediaItem(TdlibDataSource.UriFactory.create(accountId, file)));
     }
+  }
+
+  public static MediaSource newMediaSource (RandomAccessFile file) {
+    return new ProgressiveMediaSource.Factory(new RandomAccessDataSource.Factory(file)).createMediaSource(newMediaItem(Uri.EMPTY));
   }
 
   public static MediaSource newMediaSource (int accountId, int fileId) {
@@ -1848,7 +1859,7 @@ public class U {
     return successCount == innerFiles.length && fromDir.delete();
   }
 
-  private static boolean moveFile (File fromFile, File toFile) {
+  public static boolean moveFile (File fromFile, File toFile) {
     if (fromFile.renameTo(toFile)) {
       return true;
     }
@@ -3488,6 +3499,16 @@ public class U {
     } else {
       return -1;
     }
+  }
+
+  public static int getStreamVolume (int stream) {
+    final AudioManager audioManager = (AudioManager) UI.getContext().getSystemService(Context.AUDIO_SERVICE);
+    return audioManager.getStreamVolume(stream);
+  }
+
+  public static void adjustStreamVolume (int stream, int volume, int flags) {
+    final AudioManager audioManager = (AudioManager) UI.getContext().getSystemService(Context.AUDIO_SERVICE);
+    audioManager.adjustStreamVolume(stream, volume, flags);
   }
 
   // ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION opened, but the permission is still not granted. Ignore until the app restarts.
